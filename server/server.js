@@ -15,7 +15,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: process.env.CLIENT_URL || 'http://localhost:3001',
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -43,6 +43,12 @@ io.on('connection', (socket) => {
     console.log(`${username} joined the chat`);
   });
 
+  // Handle room joining
+socket.on('join_room', (roomName) => {
+  socket.join(roomName);
+  socket.currentRoom = roomName;
+});
+
   // Handle chat messages
   socket.on('send_message', (messageData) => {
     const message = {
@@ -60,7 +66,46 @@ io.on('connection', (socket) => {
       messages.shift();
     }
     
+    // Send to current room
+    io.to(socket.currentRoom || 'general').emit('receive_message', message);
+  });
+
+  // Handle files
+  socket.on('send_file', (fileData) => {
+    const message = {
+      id: Date.now(),
+      sender: users[socket.id]?.username || 'Anonymous',
+      senderId: socket.id,
+      timestamp: new Date().toISOString(),
+      file: true,
+      fileName: fileData.fileName,
+      fileData: fileData.data
+    };
+
+    messages.push(message);
     io.emit('receive_message', message);
+  });
+
+  // Handle message reactions
+  socket.on('message_react', ({ messageId, reaction }) => {
+    const message = messages.find(m => m.id === messageId);
+    if (message) {
+      if (!message.reactions) message.reactions = {};
+      message.reactions[reaction] = (message.reactions[reaction] || 0) + 1;
+      io.emit('message_updated, message');
+    }
+  });
+
+   // Handle read receipts
+  socket.on('message_read', (messageId) => {
+    const message = message.find(m => m.id === messageId);
+    if (message) {
+      if (!message.readBy) message.readBy = [];
+      if (!message.readBy.includes(socket.id)) {
+        message.readBy.push(socket.id);
+        io.emit('message_updated', message);
+      }
+    }
   });
 
   // Handle typing indicator

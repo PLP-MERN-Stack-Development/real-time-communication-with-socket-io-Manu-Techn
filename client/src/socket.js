@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import { useEffect, useState } from 'react';
 
 // Socket.io connection URL
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
 
 // Create socket instance
 export const socket = io(SOCKET_URL, {
@@ -21,6 +21,14 @@ export const useSocket = () => {
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Reset when the message is viewed
+  const markAllAsRead = () => setUnreadCount(0);
+  // Increment on new messages
+  const onReceiveMessage = (message) => {
+    setUnreadCount(prev + 1);
+  };
 
   // Connect to socket server
   const connect = (username) => {
@@ -40,6 +48,16 @@ export const useSocket = () => {
     socket.emit('send_message', { message });
   };
 
+  // Add reaction to message
+  const addReaction = (messageId, reaction) => {
+    socket.emit('message_react', { messageId, reaction });
+  };
+
+  // Listen for message updates
+  const onMessageUpdated = (message) => {
+    setMessages(prev => prev.map(msg => msg.id === message.id ? message : msg));
+  };
+
   // Send a private message
   const sendPrivateMessage = (to, message) => {
     socket.emit('private_message', { to, message });
@@ -48,6 +66,16 @@ export const useSocket = () => {
   // Set typing status
   const setTyping = (isTyping) => {
     socket.emit('typing', isTyping);
+  };
+
+  // Mark message as read
+  const markAsRead = (messageId) => {
+    socket.emit('message_read', messageId);
+  };
+
+  //Join room
+  const joinRoom = (roomName) => {
+    socket.emit('join_room', roomName);
   };
 
   // Socket event listeners
@@ -63,6 +91,7 @@ export const useSocket = () => {
 
     // Message events
     const onReceiveMessage = (message) => {
+      setUnreadCount(prev => prev + 1);
       setLastMessage(message);
       setMessages((prev) => [...prev, message]);
     };
@@ -117,6 +146,7 @@ export const useSocket = () => {
     socket.on('user_joined', onUserJoined);
     socket.on('user_left', onUserLeft);
     socket.on('typing_users', onTypingUsers);
+    socket.on('message_updated', onMessageUpdated);
 
     // Clean up event listeners
     return () => {
@@ -128,6 +158,7 @@ export const useSocket = () => {
       socket.off('user_joined', onUserJoined);
       socket.off('user_left', onUserLeft);
       socket.off('typing_users', onTypingUsers);
+      socket.off('message_updated', onMessageUpdated);
     };
   }, []);
 
@@ -143,6 +174,10 @@ export const useSocket = () => {
     sendMessage,
     sendPrivateMessage,
     setTyping,
+    addReaction,
+    markAsRead,
+    joinRoom,
+    unreadCount,
   };
 };
 
